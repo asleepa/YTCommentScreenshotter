@@ -33,7 +33,18 @@ config = {
     "screenshot_bg_color": (15, 15, 15), # Background color of the screenshot, default #0f0f0f or 15, 15, 15 - youtube dark mode background color
     "max_comments": 0, # Max comments to parse, set to 0 to parse every comment
     "headless": False, # Run headless mode on the browser - open the browser in the background
-    "force_dark_theme": False # Force dark theme on pages for screenshots, headless doesn't detect system theme
+    "force_dark_theme": False, # Force dark theme on pages for screenshots, headless doesn't detect system theme
+
+    # [ms] = Current timestamp in milliseconds
+    # [guid] = Random GUID
+    
+    # * Following requires save_json to also be enabled:
+    # [author] = Author username (removes the @ as a safeguard)
+    # [date] = Comment published ago
+
+    # [ms]-[guid]
+    "screenshot_name_format": "[author],[guid]" # WARNING! You should always put [guid] somewhere in the name to prevent duplicates.
+    # Also, try not to make the path to the file too long. Windows may prevent the file from being added if it is.
 }
 
 #endregion
@@ -306,6 +317,7 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
     if commentList == None or len(commentList) < 1: continue # Redo the loop because comments are still not loaded
 
+    localCommentsParsed = 0
     for comment in commentList:
         if "display: none" in comment.get_attribute("style"): continue
         commentInfo, commentInfoBody, commentMain, commentAuthor, commentExpander = get_comment_elements(comment)
@@ -450,18 +462,21 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
             except Exception as e:
                 print(Fore.RED + "[ERROR] An exception occured while checking a comment's replies:", e)
-                pass # Do nothing - also probably no replies if theres no button
+                pass # Do nothing - also probably no replies if theres no button=
 
-        def save_json():
+        aImg, aName, cTxt, cPublished, cLikes, cHeart, cPinned, aBadgeSVG = "", "", "", "", "", False, False, ""
+        if config["save_json"] == True:
+            # Get the comment's stats
+            aImg, aName, cTxt, cPublished, cLikes, cHeart, cPinned, aBadgeSVG = get_comment_json(commentMain, commentAuthor, commentExpander)
+
+        def save_json(screenshotPath):
             """
             Saves the comment's data into data.json.
             """
 
-            # Get the comment's stats
-            aImg, aName, cTxt, cPublished, cLikes, cHeart, cPinned, aBadgeSVG = get_comment_json(commentMain, commentAuthor, commentExpander)
-
             # Create the dictionary to append to "comments" in data.json using the variables we set earlier
             newComment = {
+                "File": screenshotPath,
                 "Content": cTxt,
                 "Published": cPublished,
                 "Author": {
@@ -477,25 +492,19 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
                 "Replies": cReplies
             }
 
-            def write_json():
-                """
-                Writes comment to data.json.
-                """
+            data = None
+            with open("data.json", "r") as file:
+                data = json.load(file)
 
-                data = None
-                with open("data.json", "r") as file:
-                    data = json.load(file)
+            if data == None: return
+            data["comments"].append(newComment)
 
-                if data == None: return
-                data["comments"].append(newComment)
+            with open("data.json", "w") as file:
+                json.dump(data, file, indent = 1)
 
-                with open("data.json", "w") as file:
-                    json.dump(data, file, indent = 1)
-
-            write_json()
             print(Fore.GREEN + f"[SUCCESS] Wrote new comment entry for comment {commentsParsed + 1} to data.json")
 
-        def save_screenshot():
+        def save_screenshot(screenshotPath: str = f"screenshots/{str(uuid.uuid4())}.png"):
             """
             Saves the comment's binary PNG data as a PNG file in the screenshots folder.
             """
@@ -503,8 +512,6 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
             start_time = get_current_ms()
             print(Fore.BLUE + "Creating screenshot")
-
-            screenshotName = screenshot_name()
 
             # Change this in a pull request in the future if the margin is changed on YouTube please
             marginY = 8 # The Y pixels of margin at the bottom of each comment and reply, seperating them
@@ -541,20 +548,53 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
             os.makedirs(name = "screenshots", exist_ok = True)
 
-            finalImg.save(fp = f"screenshots/{screenshotName}.png")
+            finalImg.save(fp = screenshotPath)
             print(Fore.GREEN + f"[SUCCESS] Saved comment {commentsParsed + 1} to screenshots folder (elapsed {get_current_ms() - start_time}ms)")
 
         # Scroll until the comment is vertically centered so it gets a good view of the comment.
         driver.execute_script("arguments[0].scrollIntoView({ block: 'center' });", comment)
 
-        if config["save_json"] == True: save_json()
-        if config["save_screenshot"] == True: save_screenshot()
+        replacements = {
+            "[ms]": str(get_current_ms()),
+            "[guid]": str(uuid.uuid4()),
+            "[author]": aName,
+            "[date]": cPublished
+        }
+
+        def text_replacements(text: str):
+            for key, value in replacements.items():
+                if isinstance(value, str) and len(value) > 0:
+                    text = text.replace(key, value)
+            return text
+        
+        screenshotPath = None
+        if config["save_screenshot"] == True:
+            screenshotPath = f"screenshots/{text_replacements(config["screenshot_name_format"])}.png"
+            save_screenshot(screenshotPath)
+
+        if config["save_json"] == True: save_json(screenshotPath) # File will be None if save_screenshot is False
 
         # Hide the comment last so that we can actually take a screenshot of it
         hide_element(comment)
         commentsParsed += 1
+        localCommentsParsed += 1
+
+    if localCommentsParsed < 1: break
 
     pagesParsed += 1
     print(Fore.MAGENTA + f"Finished page {pagesParsed}, {commentsParsed} comments parsed so far")
 
+data = None
+with open("data.json", "r") as file:
+    data = json.load(file)
+
+if data != None:
+    data["data"]["youtubeUrl"] = config["youtube_video"]
+    data["data"]["commentsParsed"] = commentsParsed
+    data["data"]["pagesParsed"] = pagesParsed
+
+    with open("data.json", "w") as file:
+        json.dump(data, file, indent = 1)
+
+print(Fore.CYAN + "Finished!")
 #endregion
