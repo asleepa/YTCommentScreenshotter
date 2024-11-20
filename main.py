@@ -309,7 +309,12 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
     for comment in commentList:
         if "display: none" in comment.get_attribute("style"): continue
         commentInfo, commentInfoBody, commentMain, commentAuthor, commentExpander = get_comment_elements(comment)
-        commentReplies = locate_element(locator = (By.ID, "replies"), parent = comment, timeout = 1)
+        commentReplies = None
+
+        try:
+            commentReplies = comment.find_element(by = By.ID, value = "replies")
+        except Exception:
+            pass # Do nothing
 
         if commentExpander:
             try:
@@ -336,6 +341,10 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
                 for element in repliesExpander.find_elements(by = By.TAG_NAME, value = "div"):
                     if "expander-header" in element.get_attribute("class"):
                         repliesExpanderHeader = element
+
+                if repliesExpanderHeader:
+                    # Scroll to the replies button to load it
+                    driver.execute_script("arguments[0].scrollIntoView({ block: 'center' });", repliesExpanderHeader)
 
                 moreReplies = None
                 for element in repliesExpanderHeader.find_elements(by = By.TAG_NAME, value = "div"):
