@@ -18,6 +18,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import NoSuchElementException
 from PIL import Image
+import os
 import io
 import uuid
 import time
@@ -522,6 +523,8 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
                 newImg.paste(replyImg, (max(finalW, replyW) - replyW, finalH))
 
                 finalImg = newImg
+
+            os.makedirs(name = "screenshots", exist_ok = True)
 
             finalImg.save(fp = f"screenshots/{screenshotName}.png")
             print(Fore.GREEN + f"[SUCCESS] Saved comment {commentsParsed + 1} to screenshots folder (elapsed {get_current_ms() - start_time}ms)")
