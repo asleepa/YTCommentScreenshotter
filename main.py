@@ -307,6 +307,7 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
     if commentList == None or len(commentList) < 1: continue # Redo the loop because comments are still not loaded
 
     for comment in commentList:
+        if "display: none" in comment.get_attribute("style"): continue
         commentInfo, commentInfoBody, commentMain, commentAuthor, commentExpander = get_comment_elements(comment)
         commentReplies = locate_element(locator = (By.ID, "replies"), parent = comment, timeout = 1)
 
@@ -535,8 +536,8 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
         if config["save_json"] == True: save_json()
         if config["save_screenshot"] == True: save_screenshot()
 
-        # Delete the comment last so that we can actually take a screenshot of it
-        driver.execute_script("arguments[0].remove();", comment) # We don't need the comment anymore, we already preserved it
+        # Hide the comment last so that we can actually take a screenshot of it
+        hide_element(comment)
         commentsParsed += 1
 
     pagesParsed += 1
