@@ -1,6 +1,6 @@
 # region introduction
 """
-    YT (YouTube) Comments Screenshotter
+    YT (YouTube) Comments Screenshotter v1.00
     A side project which saves each comment of a YouTube video in screenshots and data.json.
     
     @asleepa | Discord
