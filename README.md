@@ -3,9 +3,6 @@
 
 ## Installation
 
-**Git**: https://git-scm.com/downloads
-**Python**: https://www.python.org/downloads/
-
 The python version used for this repository is **3.12.5**.
 
 1. Clone the repository using git[^1]
@@ -24,6 +21,7 @@ pip install -r requirements.txt
 
 ## Usage
 You can run main.py (the code) using the command `python main.py`.
+
 To exit the terminal:
 - Windows & Linux: <kbd>⌃ Control</kbd> + <kbd>C</kbd>
 - Mac: <kbd>⌘ Command</kbd> + <kbd>.</kbd>
