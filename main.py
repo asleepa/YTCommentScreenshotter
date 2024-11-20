@@ -332,10 +332,15 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
         cReplies = []
         cReplyBinaries = []
 
-        if commentReplies:
+        if commentReplies != None:
             try:
                 repliesRenderer = commentReplies.find_element(by = By.TAG_NAME, value = "ytd-comment-replies-renderer")
                 repliesExpander = repliesRenderer.find_element(by = By.ID, value = "expander")
+            except Exception:
+                pass # Do nothing
+
+        if repliesExpander != None:
+            try:
                 repliesExpanderContents = repliesExpander.find_element(by = By.ID, value = "expander-contents")
 
                 for element in repliesExpander.find_elements(by = By.TAG_NAME, value = "div"):
