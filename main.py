@@ -37,13 +37,14 @@ config = {
 
     # [ms] = Current timestamp in milliseconds
     # [guid] = Random GUID
+    # [id] - Selenium internal ID for elements, always unique but long like guid
     
     # * Following requires save_json to also be enabled:
     # [author] = Author username (removes the @ as a safeguard)
     # [date] = Comment published ago
 
     # e.g. [ms]-[guid]
-    "screenshot_name_format": "[author],[guid]" # WARNING! You should always put [guid] somewhere in the name to prevent duplicates.
+    "screenshot_name_format": "[author],[guid]" # WARNING! You should always put [guid] or [id] somewhere in the name to prevent duplicates.
     # Also, try not to make the path to the file too long. Windows may prevent the file from being added if it is.
 }
 
@@ -557,6 +558,7 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
         replacements = {
             "[ms]": str(get_current_ms()),
             "[guid]": str(uuid.uuid4()),
+            "[id]": comment.id,
             "[author]": aName,
             "[date]": cPublished
         }
