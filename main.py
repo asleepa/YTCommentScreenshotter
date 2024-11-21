@@ -42,7 +42,7 @@ config = {
     # [author] = Author username (removes the @ as a safeguard)
     # [date] = Comment published ago
 
-    # [ms]-[guid]
+    # e.g. [ms]-[guid]
     "screenshot_name_format": "[author],[guid]" # WARNING! You should always put [guid] somewhere in the name to prevent duplicates.
     # Also, try not to make the path to the file too long. Windows may prevent the file from being added if it is.
 }
@@ -552,7 +552,7 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
             print(Fore.GREEN + f"[SUCCESS] Saved comment {commentsParsed + 1} to screenshots folder (elapsed {get_current_ms() - start_time}ms)")
 
         # Scroll until the comment is vertically centered so it gets a good view of the comment.
-        driver.execute_script("arguments[0].scrollIntoView({ block: 'center' });", comment)
+        driver.execute_script("arguments[0].scrollIntoView({ block: 'center' });", commentInfo) # comment, not commentInfo - or it'll include the replies
 
         replacements = {
             "[ms]": str(get_current_ms()),
@@ -560,6 +560,9 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
             "[author]": aName,
             "[date]": cPublished
         }
+
+        if isinstance(replacements["[author]"], str) and len(replacements["[author]"]) > 0:
+            replacements["[author]"] = replacements["[author]"].replace("@", "") # Remove @'s as a safeguard
 
         def text_replacements(text: str):
             for key, value in replacements.items():
@@ -588,6 +591,7 @@ data = None
 with open("data.json", "r") as file:
     data = json.load(file)
 
+# Apply some extra data to help web scrapers or just viewers who are looking at the json
 if data != None:
     data["data"]["youtubeUrl"] = config["youtube_video"]
     data["data"]["commentsParsed"] = commentsParsed
