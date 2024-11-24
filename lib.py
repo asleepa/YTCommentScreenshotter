@@ -8,11 +8,11 @@ import time
 
 # Either save_json, save_screenshot, or both must be True; they can't both be False
 config = {
-    "youtube_video": "https://www.youtube.com/watch?v=uac9vWs3Lc0", # Youtube video URL
+    "youtube_video": "https://www.youtube.com/watch?v=S32kpwRKJgI", # Youtube video URL
     "element_timeout": 30, # Default timeout in seconds when searching for an element
     "reply_timeout": 10, # Default timeout in seconds when checking if replies have loaded
     "save_json": True, # Enable this if you want the comments to be stored in data.json
-    "save_screenshot": False, # Whether to save screenshots to screenshots folder or not take them at all
+    "save_screenshot": True, # Whether to save screenshots to screenshots folder or not take them at all
     "screenshot_bg_color": (15, 15, 15), # Background color of the screenshot, default #0f0f0f or 15, 15, 15 - youtube dark mode background color
     "max_comments": 0, # Max comments to parse, set to 0 to parse every comment
     "headless": False, # Run headless mode on the browser - open the browser in the background
