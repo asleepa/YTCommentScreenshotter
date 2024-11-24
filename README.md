@@ -1,6 +1,4 @@
 # YTCommentScreenshotter
-**Version v1.00**
-
 ## Installation
 
 The python version used for this repository is **3.12.5**.
@@ -27,7 +25,7 @@ To exit the terminal:
 - Mac: <kbd>⌘ Command</kbd> + <kbd>.</kbd>
 
 > [!NOTE]
-> You can also change the config inside of main.py towards the top if you wish. Comments are provided as descriptions for each option.
+> You can also change the config inside of lib.py towards the top if you wish. Comments are provided as descriptions for each option.
 
 > [!CAUTION]
 > YouTube is constantly changing, so what's inside the code now may not work with the current site. Please submit a pull request if you fix any issues.

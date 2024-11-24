@@ -1,6 +1,6 @@
 # region introduction
 """
-    YT (YouTube) Comments Screenshotter v1.00
+    YT (YouTube) Comments Screenshotter
     A side project which saves each comment of a YouTube video in screenshots and data.json.
     
     @asleepa | Discord
@@ -10,75 +10,25 @@
     The code seen was originally used for a DougDougDoug video, hence the youtube_video URL.
 """
 
-from colorama import Fore, Style, init
+from lib import get_current_ms, exit_failure, hide_element, locate_element, get_comment_elements, get_comment_json
+from lib import config
+
+from colorama import Fore, init
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.common.exceptions import NoSuchElementException
 from PIL import Image
 import os
 import io
-import uuid
 import time
+import uuid
 import json
 
-# Either save_json, save_screenshot, or both must be True; they can't both be False
-config = {
-    "youtube_video": "https://www.youtube.com/watch?v=S32kpwRKJgI", # Youtube video URL
-    "element_timeout": 30, # Default timeout in seconds when searching for an element
-    "save_json": True, # Enable this if you want the comments to be stored in data.json
-    "save_screenshot": True, # Whether to save screenshots to screenshots folder or not take them at all
-    "screenshot_bg_color": (15, 15, 15), # Background color of the screenshot, default #0f0f0f or 15, 15, 15 - youtube dark mode background color
-    "max_comments": 0, # Max comments to parse, set to 0 to parse every comment
-    "headless": False, # Run headless mode on the browser - open the browser in the background
-    "force_dark_theme": False, # Force dark theme on pages for screenshots, headless doesn't detect system theme
-
-    # [ms] = Current timestamp in milliseconds
-    # [guid] = Random GUID
-    # [id] - Selenium internal ID for elements, always unique but long like guid
-    
-    # * Following requires save_json to also be enabled:
-    # [author] = Author username (removes the @ as a safeguard)
-    # [date] = Comment published ago
-
-    # e.g. [ms]-[guid]
-    "screenshot_name_format": "[author],[guid]" # WARNING! You should always put [guid] or [id] somewhere in the name to prevent duplicates.
-    # Also, try not to make the path to the file too long. Windows may prevent the file from being added if it is.
-}
-
 #endregion
-#region functions
+#region init
 
 init(autoreset = True)
-
-def get_current_ms():
-    """
-    :return: Current timestamp in milliseconds using the time module in python
-    """
-    return round(time.time() * 1000)
-
-# I hate using pure uuid4, I know the chances are impossibly low but I just have to append the timestamp, too scary
-def screenshot_name():
-    """
-    Generate a random name to use for screenshots in the screenshots folder. This is not the path name.
-    
-    :return: A string in the format (current timestamp in milliseconds)-(random uuid4)
-    """
-    return f"{get_current_ms()}-" + str(uuid.uuid4())
-
-# Code is sys._ExitCode but I'm not importing allat
-def exit_failure(msg: str = None, code: any = None):
-    """
-    Exits the code alongside an optional custom message and/or code.
-    """
-    if isinstance(msg, str): print("[FATAL] " + Fore.RED + Style.BRIGHT + msg)
-    exit(code if code != None else None)
-
-def hide_element(element):
-    if element == None: return
-    driver.execute_script("arguments[0].style.display = 'none';", element)
 
 # If you can't understand this I think it's better off that way
 if config["save_json"] == False and config["save_screenshot"] == False: exit_failure("save_json or save_screenshot needs to be True")
@@ -92,194 +42,45 @@ if config["force_dark_theme"] == True: options.add_argument("--force-dark-mode")
 driver = webdriver.Chrome(options)
 driver.get(url = config["youtube_video"])
 
-def locate_element(locator: tuple[str, str], timeout: int = config["element_timeout"], parent = None):
-    """
-    Locate an element on the page or within a parent element.
-    
-    :param locator: By strategy (param 1) and value (param 2) inside a tuple
-    :param timeout: How much maximum time is given for locating an element (default 60s)
-    :param parent: WebElement to search in. None = entire page
-    :return: WebElement or None if locate_element times out
-    """
-    print("Locating element with locator", locator)
-    start_time = get_current_ms()
-    while True:
-        try:
-            context = parent if parent else driver
-
-            # Wait until the element exists
-            element = WebDriverWait(context, timeout).until(EC.presence_of_element_located(locator))
-            if element:
-                width, height = element.size["width"], element.size["height"]
-                if width > 0 and height > 0: # Check that the width and height of the element is > 0 so that it doesn't error when screenshotting
-                    return element
-        except Exception:
-            pass # Do nothing
-
-        # Check if timed out by checking if the difference between now and when the function was ran is greater than timeout * 1000 (sec -> ms)
-        if get_current_ms() - start_time > timeout * 1000:
-            break # Stop running the "while True" loop
-
-    print(Fore.RED + "Could not find element")
-    return None
-
-def get_comment_elements(parentComment, isReply: bool = False):
-    commentInfo = locate_element(locator = (By.ID, "comment"), parent = parentComment, timeout = 1) if isReply == False else parentComment
-    commentInfoBody = None
-    commentMain = None
-    commentAuthor = None
-    commentExpander = None
-
-    # If parent is None it's going to search the entire page, so this is a safeguard since im lazy
-    try:
-        commentInfoBody = commentInfo.find_element(by = By.ID, value = "body")
-        commentMain = commentInfoBody.find_element(by = By.ID, value = "main")
-        commentAuthor = commentInfoBody.find_element(by = By.ID, value = "author-thumbnail")
-        commentExpander = commentMain.find_element(by = By.ID, value = "expander")
-    except Exception:
-        pass # Do nothing
-
-    return commentInfo, commentInfoBody, commentMain, commentAuthor, commentExpander
-
-def get_comment_json(commentMain, commentAuthor, commentExpander):
-    """
-    Get the JSON data of a comment or reply.
-    
-    :return: (tuple) Author Profile Image, Author Name, Comment Text, Comment Publish Date, Like Count, Heart, Pin, Author Badge SVG
-    """
-    aImg = "" # Author Profile Image
-    aName = "" # Author Name
-    cTxt = "" # Comment Text
-    cPublished = "" # Comment Publish Date
-
-    cLikes = "" # Like Count (text because API would make it take longer, same reason why theres no dislikes)
-    cHeart = False # Was the comment hearted by the creator?
-    cPinned = False # Did the creator pin the comment?
-    aBadgeSVG = None # SVG element in text if the author of the comment has a badge e.g. verified, music, subscription - otherwise None
-
-    if commentAuthor:
-        # Author Name & Profile Picture Image
-        try:
-            pfpButton = commentAuthor.find_element(by = By.TAG_NAME, value = "a")
-            aName = pfpButton.get_attribute("aria-label") # Author Name
-
-            pfpShadow = pfpButton.find_element(by = By.TAG_NAME, value = "yt-img-shadow")
-            pfpImg = pfpShadow.find_element(by = By.TAG_NAME, value = "img")
-
-            aImg = pfpImg.get_attribute("src") # Profile Picture Image
-        except Exception:
-            pass # Do nothing
-
-    if commentMain:
-        # Comment Text
-        if commentExpander:
-            try:
-                # commentExpander and repliesExpander are not the same!
-                content = commentExpander.find_element(by = By.ID, value = "content")
-                contentText = content.find_element(by = By.ID, value = "content-text")
-                text = contentText.find_element(by = By.TAG_NAME, value = "span")
-
-                cTxt = text.get_attribute("innerHTML")
-            except Exception:
-                pass # Do nothing
-
-    # Likes & Heart
-    try:
-        actionButtons = commentMain.find_element(by = By.ID, value = "action-buttons")
-        toolbar = actionButtons.find_element(by = By.ID, value = "toolbar")
-
-        # Heart
-        try:
-            creatorHeart = toolbar.find_element(by = By.ID, value = "creator-heart") # Appears even if the comment isn't hearted
-            creatorHeart.find_element(by = By.TAG_NAME, value = "ytd-creator-heart-renderer") # Only appears if the comment was actually hearted
-
-            cHeart = True
-        except Exception:
-            pass
-
-        voteCount = toolbar.find_element(by = By.ID, value = "vote-count-middle")
-
-        cLikes = voteCount.get_attribute("innerHTML").strip()
-    except Exception:
-        pass # Do nothing
-
-    # Published Time, Pin, & Author Badge
-    try:
-        header = commentMain.find_element(by = By.ID, value = "header")
-
-        # Pin
-        try:
-            pinnedBadge = header.find_element(by = By.ID, value = "pinned-comment-badge")
-            pinnedBadge.find_element(by = By.TAG_NAME, value = "ytd-pinned-comment-badge-renderer")
-
-            cPinned = True
-        except Exception:
-            pass # Do nothing
-
-        headerAuthor = header.find_element(by = By.ID, value = "header-author")
-
-        # Badge
-        try:
-            badge = headerAuthor.find_element(by = By.ID, value = "author-comment-badge")
-            badgeRenderer = badge.find_element(by = By.TAG_NAME, value = "ytd-author-comment-badge-renderer")
-            badgeIcon = badgeRenderer.find_element(by = By.TAG_NAME, value = "yt-icon") # or by = By.ID, value = icon
-            shape = badgeIcon.find_element(by = By.TAG_NAME, value = "span")
-            container = shape.find_element(by = By.TAG_NAME, value = "div")
-            svg = container.find_element(by = By.TAG_NAME, value = "svg")
-
-            aBadgeSVG = svg.get_attribute("outerHTML")
-        except Exception:
-            pass # Do nothing
-
-        publishedTime = headerAuthor.find_element(by = By.ID, value = "published-time-text")
-        date = publishedTime.find_element(by = By.TAG_NAME, value = "a")
-
-        cPublished = date.get_attribute("innerHTML").strip()
-    except Exception:
-        pass # Do nothing
-
-    return aImg, aName, cTxt, cPublished, cLikes, cHeart, cPinned, aBadgeSVG
-
 #endregion
 #region code
 
 # YouTube doesn't necessarily respond to system themes like other sites so we'll set it ourselves alongside --force-dark-mode
 if config["force_dark_theme"] == True:
-    body = locate_element(locator = (By.TAG_NAME, "body"))
+    body = locate_element(driver, locator = (By.TAG_NAME, "body"))
 
     if body != None:
-        driver.execute_script("""
-            document.cookie = "PREF=f6=400; path=/; domain=.youtube.com";
-            location.reload();
-        """)
+        # Set YouTube preference cookie (PREF)
+        driver.execute_script("document.cookie = \"PREF=f6=400; path=/; domain=.youtube.com\";")
+        driver.refresh()
 
-commentsContainer = locate_element(locator = (By.ID, "comments"))
+commentsContainer = locate_element(driver, locator = (By.ID, "comments"))
 if commentsContainer != None: ActionChains(driver).move_to_element(commentsContainer).perform() # Scroll/teleport to comments container to load it
 
 commentSection = None
 comments = None
 
-if commentsContainer != None: commentSection = locate_element(locator = (By.ID, "sections"), parent = commentsContainer)
-if commentSection != None: comments = locate_element(locator = (By.ID, "contents"), parent = commentSection)
+if commentsContainer != None: commentSection = locate_element(driver, locator = (By.ID, "sections"), parent = commentsContainer)
+if commentSection != None: comments = locate_element(driver, locator = (By.ID, "contents"), parent = commentSection)
 
 if comments == None: exit_failure("Comment section could not be found")
 
 # execute_script executes code into the developer console, be careful
 try:
     popupContainer = driver.find_element(by = By.TAG_NAME, value = "ytd-popup-container")
-    hide_element(popupContainer) # Hide the YouTube popup container from interfering with screenshots
+    hide_element(driver, popupContainer) # Hide the YouTube popup container from interfering with screenshots
 except Exception:
     pass # Do nothing
 
 try:
     topbar = driver.find_element(by = By.ID, value = "masthead-container")
-    hide_element(topbar) # Incase the comment appears at the top, hide the topbar
+    hide_element(driver, topbar) # Incase the comment appears at the top, hide the topbar
 except Exception:
     pass # Do nothing
 
 try:
     recommended = driver.find_element(by = By.ID, value = "secondary")
-    hide_element(recommended) # Hide recommended videos, chat, etc. on the right
+    hide_element(driver, recommended) # Hide recommended videos, chat, etc. on the right
 except Exception:
     pass # Do nothing
 
@@ -289,19 +90,19 @@ try:
     player = primary.find_element(by = By.ID, value = "player")
     below = primary.find_element(by = By.ID, value = "below")
 
-    hide_element(player) # More room for comments which appear at the top
+    hide_element(driver, player) # More room for comments which appear at the top
 
     belowItems = below.find_elements(by = By.XPATH, value = "./child::*")
 
     for element in belowItems:
         if element.get_attribute("id") == "comments": continue
-        hide_element(element)
+        hide_element(driver, element)
 except Exception:
     pass # Do nothing
 
 try:
     commentsHeader = commentSection.find_element(by = By.ID, value = "header")
-    hide_element(commentsHeader) # Hide the comments header (add a comment, sort by, comment count etc)
+    hide_element(driver, commentsHeader) # Hide the comments header (add a comment, sort by, comment count etc)
 except Exception:
     pass # Do nothing
 
@@ -309,7 +110,6 @@ commentsParsed = 0
 pagesParsed = 0
 
 while True if config["max_comments"] < 1 else commentsParsed < config["max_comments"]:
-    # We're not actually going to check for if the spinner is there because sometimes it appears despite comments being loaded
     commentList = None
     try:
         commentList = comments.find_elements(by = By.TAG_NAME, value = "ytd-comment-thread-renderer")
@@ -321,7 +121,7 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
     localCommentsParsed = 0
     for comment in commentList:
         if "display: none" in comment.get_attribute("style"): continue
-        commentInfo, commentInfoBody, commentMain, commentAuthor, commentExpander = get_comment_elements(comment)
+        commentInfo, commentInfoBody, commentMain, commentAuthor, commentExpander = get_comment_elements(driver, comment)
         commentReplies = None
 
         try:
@@ -329,7 +129,7 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
         except Exception:
             pass # Do nothing
 
-        if commentExpander:
+        if config["save_screenshot"] == True and commentExpander:
             try:
                 readMoreButton = commentExpander.find_element(by = By.ID, value = "more")
                 if readMoreButton.get_attribute("hidden") != "true":
@@ -385,9 +185,12 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
                 while True:
                     if continueRepliesRenderer != None:
+                        start_time = get_current_ms()
+
                         # Wait until the spinner appears, its unrealistic that it'd instantly load
                         # It'd also probably skip if it only checked if it was hidden
                         while True:
+                            if get_current_ms() - start_time >= config["reply_timeout"] * 1000: break # Prevent infinite loop
                             try:
                                 spinner = continueRepliesRenderer.find_element(by = By.ID, value = "spinner")
                                 if spinner.get_attribute("hidden") != "true": break # Break if the spinner is visible
@@ -396,6 +199,7 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
                         # Wait until replies are finished loading
                         while True:
+                            if get_current_ms() - start_time >= config["reply_timeout"] * 1000: break # Prevent infinite loop
                             try:
                                 spinner = continueRepliesRenderer.find_element(by = By.ID, value = "spinner")
                                 if spinner.get_attribute("hidden") == "true": break # Break if the spinner is hidden
@@ -407,9 +211,9 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
                     for reply in replyList:
                         if "display: none" in reply.get_attribute("style"): continue
-                        _, _, replyMain, replyAuthor, replyExpander = get_comment_elements(parentComment = reply, isReply = True)
+                        _, _, replyMain, replyAuthor, replyExpander = get_comment_elements(driver, parentComment = reply, isReply = True)
 
-                        if replyExpander:
+                        if config["save_screenshot"] == True and replyExpander:
                             try:
                                 readMoreButton = replyExpander.find_element(by = By.ID, value = "more")
                                 if readMoreButton.get_attribute("hidden") != "true":
@@ -423,7 +227,7 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
                         if config["save_json"] == True:
                             # Get the reply's stats
-                            aImg, aName, cTxt, cPublished, cLikes, cHeart, _, aBadgeSVG = get_comment_json(replyMain, replyAuthor, replyExpander)
+                            aImg, aName, cTxt, cPublished, cLikes, cHeart, _, aBadgeSVG, aCreator = get_comment_json(replyMain, replyAuthor, replyExpander)
 
                             newReply = {
                                 "Content": cTxt,
@@ -431,7 +235,8 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
                                 "Author": {
                                     "Image": aImg,
                                     "Name": aName,
-                                    "Badge": aBadgeSVG
+                                    "Badge": aBadgeSVG,
+                                    "Creator": aCreator
                                 },
                                 "Stats": {
                                     "Likes": cLikes,
@@ -441,10 +246,8 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
                             cReplies.append(newReply)
 
-                        if config["save_screenshot"] == True:
-                            cReplyBinaries.append(reply.screenshot_as_png)
-
-                        hide_element(reply)
+                        if config["save_screenshot"] == True: cReplyBinaries.append(reply.screenshot_as_png)
+                        hide_element(driver, reply)
 
                         repliesParsed += 1
                         print(f"Saved reply {repliesParsed}, page {replyPages} of comment {commentsParsed + 1}")
@@ -465,10 +268,10 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
                 print(Fore.RED + "[ERROR] An exception occured while checking a comment's replies:", e)
                 pass # Do nothing - also probably no replies if theres no button=
 
-        aImg, aName, cTxt, cPublished, cLikes, cHeart, cPinned, aBadgeSVG = "", "", "", "", "", False, False, ""
+        aImg, aName, cTxt, cPublished, cLikes, cHeart, cPinned, aBadgeSVG, aCreator = "", "", "", "", "", False, "", "", False
         if config["save_json"] == True:
             # Get the comment's stats
-            aImg, aName, cTxt, cPublished, cLikes, cHeart, cPinned, aBadgeSVG = get_comment_json(commentMain, commentAuthor, commentExpander)
+            aImg, aName, cTxt, cPublished, cLikes, cHeart, cPinned, aBadgeSVG, aCreator = get_comment_json(commentMain, commentAuthor, commentExpander)
 
         def save_json(screenshotPath):
             """
@@ -477,13 +280,14 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
             # Create the dictionary to append to "comments" in data.json using the variables we set earlier
             newComment = {
-                "File": screenshotPath,
+                "Screenshot": screenshotPath,
                 "Content": cTxt,
                 "Published": cPublished,
                 "Author": {
                     "Image": aImg,
                     "Name": aName,
-                    "Badge": aBadgeSVG
+                    "Badge": aBadgeSVG,
+                    "Creator": aCreator
                 },
                 "Stats": {
                     "Likes": cLikes,
@@ -499,6 +303,12 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
 
             if data == None: return
             data["comments"].append(newComment)
+
+            # Apply extra data now instead of when the code is completed if you decide to terminate the process early
+            # pagesParsed is also updated towards the end of the code
+            data["data"]["youtubeUrl"] = config["youtube_video"]
+            data["data"]["commentsParsed"] = commentsParsed + 1
+            data["data"]["pagesParsed"] = pagesParsed
 
             with open("data.json", "w") as file:
                 json.dump(data, file, indent = 1)
@@ -580,7 +390,7 @@ while True if config["max_comments"] < 1 else commentsParsed < config["max_comme
         if config["save_json"] == True: save_json(screenshotPath) # File will be None if save_screenshot is False
 
         # Hide the comment last so that we can actually take a screenshot of it
-        hide_element(comment)
+        hide_element(driver, comment)
         commentsParsed += 1
         localCommentsParsed += 1
 
@@ -593,10 +403,8 @@ data = None
 with open("data.json", "r") as file:
     data = json.load(file)
 
-# Apply some extra data to help web scrapers or just viewers who are looking at the json
+# Apply some (final) extra data to help web scrapers or just viewers who are looking at the json
 if data != None:
-    data["data"]["youtubeUrl"] = config["youtube_video"]
-    data["data"]["commentsParsed"] = commentsParsed
     data["data"]["pagesParsed"] = pagesParsed
 
     with open("data.json", "w") as file:
